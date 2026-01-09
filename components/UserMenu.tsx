@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { User, Settings, CreditCard, LogOut, ChevronDown, Crown } from 'lucide-react';
 
 interface UserMenuProps {
@@ -12,6 +13,7 @@ interface UserMenuProps {
 const UserMenu: React.FC<UserMenuProps> = ({ userName, userEmail, onLogout, onOpenSettings, hasPlan = true }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const displayName = userName || userEmail.split('@')[0];
   const initials = displayName
@@ -67,6 +69,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ userName, userEmail, onLogout, onOp
           <div className="p-2 space-y-1">
             <button
               onClick={() => {
+                navigate('/profile');
                 setIsOpen(false);
               }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:bg-surfaceHighlight hover:text-white transition-colors rounded-lg"
@@ -77,6 +80,7 @@ const UserMenu: React.FC<UserMenuProps> = ({ userName, userEmail, onLogout, onOp
 
             <button
               onClick={() => {
+                navigate('/plans');
                 setIsOpen(false);
               }}
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:bg-surfaceHighlight hover:text-white transition-colors rounded-lg"
