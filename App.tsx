@@ -29,28 +29,25 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch user profile when session changes
+  // Fetch user profile and customizations when session changes
   useEffect(() => {
     if (session?.user?.id) {
+      // Fetch profile
       authService.getProfile(session.user.id).then(({ profile }) => {
         setUserProfile(profile);
       });
+      
+      // Fetch customizations from Supabase
+      authService.getCustomizations(session.user.id).then(({ abbreviations }) => {
+        if (abbreviations && abbreviations.length > 0) {
+          setCustomAbbreviations(abbreviations);
+        }
+      });
     } else {
       setUserProfile(null);
+      setCustomAbbreviations([]);
     }
   }, [session]);
-
-  // Load settings on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('seo_custom_abbreviations');
-    if (saved) {
-      try {
-        setCustomAbbreviations(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse settings", e);
-      }
-    }
-  }, []);
 
   const handleAuthSuccess = () => {
     // Session will be updated automatically via onAuthStateChange

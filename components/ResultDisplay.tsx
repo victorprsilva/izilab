@@ -1,7 +1,9 @@
 
 import React, { useState, useRef, memo } from 'react';
 import { AnalyzedExam, LabResultItem } from '../types';
-import { Copy, CheckCheck, RefreshCw, ScanEye, ArrowLeft, AlertTriangle, ChevronDown, ChevronUp, FilePlus, User, Trash2, XCircle, Download, MessageSquare, FileText, Stethoscope, AlignJustify, Grid } from 'lucide-react';
+import { Copy, CheckCheck, RefreshCw, ScanEye, ArrowLeft, AlertTriangle, ChevronDown, ChevronUp, FilePlus, User, Trash2, XCircle, Download, MessageSquare, FileText, Stethoscope, AlignJustify, Grid, FileSpreadsheet, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
 
 interface ResultDisplayProps {
   data: AnalyzedExam[];
@@ -33,71 +35,135 @@ const getCategory = (abbr: string): string => {
   return 'OUTROS';
 };
 
-// Excel Export Helper
+// Excel Export Helper using XLSX library
 const downloadExcel = (exam: AnalyzedExam) => {
-    let htmlContent = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #000; padding: 5px; text-align: left; }
-                .abnormal { color: red; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <h3>${exam.patientInitials} - ${exam.category === 'NON_LAB' ? exam.nonLabData?.examTitle : 'Exame Laboratorial'} - ${exam.collectionDate || 'Data N/A'}</h3>
-    `;
+    const wb = XLSX.utils.book_new();
+    const today = new Date();
+    const dateStr = exam.collectionDate || `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
     if (exam.category === 'LAB') {
-        htmlContent += `
-            <table>
-                <thead>
-                    <tr>
-                        <th>Exame</th>
-                        <th>Resultado</th>
-                        <th>Referência</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        exam.results.forEach(res => {
-            const isAbnormal = res.abnormality !== 'NORMAL';
-            const classStr = isAbnormal ? 'class="abnormal"' : '';
-            htmlContent += `
-                <tr>
-                    <td>${res.abbreviation}</td>
-                    <td ${classStr}>${res.value}</td>
-                    <td>${res.referenceRange || '-'}</td>
-                    <td ${classStr}>${res.abnormality}</td>
-                </tr>
-            `;
-        });
-        htmlContent += `</tbody></table>`;
+        const data = [
+            ['Exame', 'Resultado', 'Referência', 'Status'],
+            ...exam.results.map(res => [
+                res.abbreviation,
+                res.value,
+                res.referenceRange || '-',
+                res.abnormality
+            ])
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
     } else {
-        // Excel format for Non-Lab
-        htmlContent += `
-            <h4>Título: ${exam.nonLabData?.examTitle || 'Laudo'}</h4>
-            <h5>Achados Principais:</h5>
-            <ul>
-                ${exam.nonLabData?.mainFindings.map(f => `<li>${f}</li>`).join('')}
-            </ul>
-            <h5>Conclusão:</h5>
-            <p>${exam.nonLabData?.impression || ''}</p>
-        `;
+        const data = [
+            ['Título', exam.nonLabData?.examTitle || 'Laudo'],
+            [''],
+            ['Achados Principais'],
+            ...(exam.nonLabData?.mainFindings.map(f => ['• ' + f]) || []),
+            [''],
+            ['Conclusão'],
+            [exam.nonLabData?.impression || '']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [{ wch: 80 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Laudo');
     }
 
-    htmlContent += `</body></html>`;
+    const fileName = `IZI_LAB_${exam.patientInitials}_${dateStr.replace(/\//g, '-')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+};
 
-    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${exam.patientInitials}_${exam.category}_${exam.collectionDate?.replace(/\//g, '-') || 'Data'}.xls`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+// PDF Export Helper
+const downloadPDF = (exam: AnalyzedExam, summaryText: string) => {
+    const doc = new jsPDF();
+    const today = new Date();
+    const dateStr = exam.collectionDate || `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const currentDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    
+    // Colors
+    const brandColor: [number, number, number] = [99, 102, 241];
+    const darkBg: [number, number, number] = [15, 23, 42];
+    const textColor: [number, number, number] = [226, 232, 240];
+    const mutedColor: [number, number, number] = [148, 163, 184];
+
+    // Background
+    doc.setFillColor(...darkBg);
+    doc.rect(0, 0, 210, 297, 'F');
+
+    // Header with gradient line
+    doc.setFillColor(...brandColor);
+    doc.rect(0, 0, 210, 3, 'F');
+
+    // Logo Text
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(24);
+    doc.setTextColor(...brandColor);
+    doc.text('IZI LAB', 20, 25);
+
+    // Subtitle
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...mutedColor);
+    doc.text('Resumo de Exame', 20, 32);
+
+    // Date on right
+    doc.setFontSize(9);
+    doc.text(`Gerado em: ${currentDate}`, 190, 25, { align: 'right' });
+
+    // Divider
+    doc.setDrawColor(50, 60, 80);
+    doc.line(20, 40, 190, 40);
+
+    // Patient Info Box
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(20, 48, 170, 25, 3, 3, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...textColor);
+    doc.text(exam.patientInitials, 28, 58);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...mutedColor);
+    const examType = exam.category === 'LAB' ? 'Laboratório' : (exam.nonLabData?.examTitle || 'Laudo');
+    doc.text(`${examType} - ${dateStr}`, 28, 66);
+    if (exam.patientAge) {
+        doc.text(exam.patientAge, 150, 62);
+    }
+
+    // Summary Section
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...brandColor);
+    doc.text('RESUMO', 20, 88);
+
+    // Summary Content Box
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(20, 93, 170, 150, 3, 3, 'F');
+
+    // Summary Text
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...textColor);
+    
+    const cleanSummary = summaryText
+        .replace(`${exam.patientInitials} - Lab (${dateStr}):\n`, '')
+        .replace(`${exam.patientInitials} - ${exam.nonLabData?.examTitle || 'Laudo'} (${dateStr}):\n\nACHADOS:\n`, '')
+        .replace('\n\nCONCLUSÃO:\n', '\n\nCONCLUSÃO:\n');
+    
+    const lines = doc.splitTextToSize(cleanSummary, 160);
+    doc.text(lines, 25, 103);
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setTextColor(...mutedColor);
+    doc.text('Documento gerado automaticamente pelo IZI LAB - HybridApps', 105, 280, { align: 'center' });
+    doc.text('Este documento é apenas um resumo e não substitui o laudo original.', 105, 285, { align: 'center' });
+
+    // Save
+    const fileName = `IZI_LAB_Resumo_${exam.patientInitials}_${dateStr.replace(/\//g, '-')}.pdf`;
+    doc.save(fileName);
 };
 
 // Feedback Helper
@@ -299,7 +365,14 @@ const PatientCard: React.FC<{ exam: AnalyzedExam; onRemove: (id: string) => void
                         className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-green-600/10 text-green-500 hover:bg-green-600/20 border border-green-600/20 rounded-lg text-xs font-bold uppercase transition-colors"
                         title="Baixar Excel"
                     >
-                        <Download size={14} /> Excel
+                        <FileSpreadsheet size={14} /> Excel
+                    </button>
+                    <button
+                        onClick={() => downloadPDF(exam, fullClipboardText)}
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-600/20 rounded-lg text-xs font-bold uppercase transition-colors"
+                        title="Baixar PDF"
+                    >
+                        <FileDown size={14} /> PDF
                     </button>
                     <button onClick={() => onRemove(exam.id)} className="text-slate-500 hover:text-red-400 transition-colors p-2 hover:bg-white/5 rounded-lg">
                         <Trash2 size={18} />
@@ -439,7 +512,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset, onAddFiles
     <div className="w-full max-w-4xl mx-auto animate-fade-in-up pb-24">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="application/pdf,image/*" multiple />
 
-      <div className="flex items-center justify-between mb-6 sticky top-20 z-40 bg-background/90 backdrop-blur-md py-4 border-b border-border/50">
+      <div className="flex items-center justify-between mb-6 sticky top-20 z-40 bg-surface/95 backdrop-blur-md py-4 px-6 border border-border rounded-2xl shadow-lg">
         <button onClick={onReset} className="flex items-center gap-2 text-slate-400 hover:text-brand-start transition-colors text-sm font-medium group">
             <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Voltar
         </button>

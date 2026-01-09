@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import type { User, Session } from '@supabase/supabase-js';
+import type { CustomAbbreviation } from '../types';
 
 export interface AuthError {
   message: string;
@@ -105,6 +106,40 @@ export const authService = {
       .from('profiles')
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', userId);
+
+    return {
+      error: error ? { message: error.message } : null,
+    };
+  },
+
+  async getCustomizations(userId: string): Promise<{ abbreviations: CustomAbbreviation[]; error: AuthError | null }> {
+    const { data, error } = await supabase
+      .from('user_customizations')
+      .select('abbreviations')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      // No row found, return empty array
+      return { abbreviations: [], error: null };
+    }
+
+    return {
+      abbreviations: data?.abbreviations || [],
+      error: error ? { message: error.message } : null,
+    };
+  },
+
+  async saveCustomizations(userId: string, abbreviations: CustomAbbreviation[]): Promise<{ error: AuthError | null }> {
+    const { error } = await supabase
+      .from('user_customizations')
+      .upsert({
+        user_id: userId,
+        abbreviations,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id',
+      });
 
     return {
       error: error ? { message: error.message } : null,

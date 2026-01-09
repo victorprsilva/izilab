@@ -329,6 +329,7 @@ const HomePage: React.FC<HomePageProps> = ({
           onClose={() => setIsSettingsOpen(false)}
           abbreviations={customAbbreviations}
           setAbbreviations={setCustomAbbreviations}
+          userId={session?.user?.id}
         />
         <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} />
       </Suspense>
