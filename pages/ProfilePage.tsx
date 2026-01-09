@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Camera, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, User, Mail, Camera, Loader2, CheckCircle2, AlertCircle, Crown, Zap, ExternalLink, CreditCard } from 'lucide-react';
 import { authService, UserProfile } from '../services/authService';
 import Logo from '../components/Logo';
 
@@ -8,14 +8,39 @@ interface ProfilePageProps {
   session: { user: { id: string; email: string } } | null;
   userProfile: UserProfile | null;
   onProfileUpdate: (profile: UserProfile) => void;
+  currentPlan?: 'free' | 'pro' | 'enterprise';
+  creditsUsed?: number;
+  creditsTotal?: number;
 }
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ session, userProfile, onProfileUpdate }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ 
+  session, 
+  userProfile, 
+  onProfileUpdate,
+  currentPlan = 'free',
+  creditsUsed = 3,
+  creditsTotal = 5
+}) => {
   const navigate = useNavigate();
   const [fullName, setFullName] = useState(userProfile?.full_name || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const planInfo = {
+    free: { name: 'Gratuito', color: 'slate', icon: Zap },
+    pro: { name: 'Profissional', color: 'amber', icon: Crown },
+    enterprise: { name: 'Empresarial', color: 'violet', icon: Crown },
+  };
+
+  const plan = planInfo[currentPlan];
+  const creditsPercentage = (creditsUsed / creditsTotal) * 100;
+
+  const handleManageSubscription = () => {
+    // TODO: Integrar com Stripe Customer Portal
+    console.log('Redirect to Stripe Customer Portal');
+    // window.location.href = 'STRIPE_CUSTOMER_PORTAL_URL';
+  };
 
   useEffect(() => {
     if (userProfile?.full_name) {
@@ -187,6 +212,98 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ session, userProfile, onProfi
                 )}
               </button>
             </form>
+          </div>
+
+          {/* Subscription Card */}
+          <div className="mt-6 bg-surface/50 backdrop-blur-xl border border-border rounded-2xl overflow-hidden">
+            <div className="p-6 border-b border-border">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <CreditCard size={20} className="text-brand-start" />
+                Assinatura
+              </h2>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Current Plan */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                    currentPlan === 'free' 
+                      ? 'bg-slate-500/20 text-slate-400' 
+                      : currentPlan === 'pro'
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-violet-500/20 text-violet-400'
+                  }`}>
+                    <plan.icon size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-400">Plano Atual</p>
+                    <p className="text-lg font-bold text-white">{plan.name}</p>
+                  </div>
+                </div>
+                {currentPlan !== 'free' && (
+                  <span className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
+                    Ativo
+                  </span>
+                )}
+              </div>
+
+              {/* Credits Usage */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-400">Créditos Utilizados</p>
+                  <p className="text-sm font-semibold text-white">
+                    {creditsUsed} <span className="text-slate-500">/ {creditsTotal}</span>
+                  </p>
+                </div>
+                <div className="w-full h-2 bg-background rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      creditsPercentage >= 90 
+                        ? 'bg-red-500' 
+                        : creditsPercentage >= 70 
+                        ? 'bg-amber-500' 
+                        : 'bg-gradient-to-r from-brand-start to-brand-end'
+                    }`}
+                    style={{ width: `${creditsPercentage}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  {currentPlan === 'free' 
+                    ? 'Renova no início de cada mês' 
+                    : 'Créditos ilimitados no seu plano'}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                {currentPlan === 'free' ? (
+                  <button
+                    onClick={() => navigate('/plans')}
+                    className="flex-1 bg-gradient-to-r from-brand-start to-brand-end hover:from-brand-600 hover:to-brand-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-brand-start/20 hover:shadow-brand-start/40 transform transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                  >
+                    <Crown size={18} />
+                    Fazer Upgrade
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleManageSubscription}
+                      className="flex-1 bg-surfaceHighlight hover:bg-border text-white font-semibold py-3 rounded-xl border border-border transition-all flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink size={16} />
+                      Gerenciar Assinatura
+                    </button>
+                    <button
+                      onClick={() => navigate('/plans')}
+                      className="flex-1 bg-transparent hover:bg-surfaceHighlight text-slate-300 font-semibold py-3 rounded-xl border border-border transition-all flex items-center justify-center gap-2"
+                    >
+                      Ver Planos
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </main>
