@@ -2,11 +2,14 @@
 import React, { useState, useEffect, Suspense, useCallback } from 'react';
 import { AnalysisState, AnalyzedExam, CustomAbbreviation, AnalysisPreferences } from './types';
 import { analyzeLabExam } from './services/geminiService';
+import { authService, UserProfile } from './services/authService';
 import Logo from './components/Logo';
 import FileUpload from './components/FileUpload';
 import BloodLoader from './components/BloodLoader';
-import LoginScreen from './components/LoginScreen';
-import { Lock, FileText, CheckCircle2, Files, Settings, Play, Trash2, File as FileIcon, Zap, LogOut, MessageSquare } from 'lucide-react';
+import AuthScreen from './components/auth/AuthScreen';
+import UserMenu from './components/UserMenu';
+import { Lock, FileText, CheckCircle2, Play, Trash2, File as FileIcon, Zap, MessageSquare } from 'lucide-react';
+import type { Session } from '@supabase/supabase-js';
 
 // Lazy load heavy components for better performance
 const ResultDisplay = React.lazy(() => import('./components/ResultDisplay'));
@@ -15,7 +18,8 @@ const FeedbackModal = React.lazy(() => import('./components/FeedbackModal'));
 
 const App: React.FC = () => {
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // App Logic State
@@ -34,14 +38,32 @@ const App: React.FC = () => {
     groupDates: false
   });
 
-  // Check authentication on mount
+  // Check authentication on mount and listen for auth changes
   useEffect(() => {
-    const auth = localStorage.getItem('hibrida_auth_token');
-    if (auth === 'hibrida30k-access-granted') {
-      setIsAuthenticated(true);
-    }
-    setIsAuthChecking(false);
+    // Get initial session
+    authService.getSession().then(({ session }) => {
+      setSession(session);
+      setIsAuthChecking(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = authService.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  // Fetch user profile when session changes
+  useEffect(() => {
+    if (session?.user?.id) {
+      authService.getProfile(session.user.id).then(({ profile }) => {
+        setUserProfile(profile);
+      });
+    } else {
+      setUserProfile(null);
+    }
+  }, [session]);
 
   // Load settings on mount
   useEffect(() => {
@@ -55,18 +77,13 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleLogin = (password: string): boolean => {
-    if (password === 'hibrida30k') {
-      localStorage.setItem('hibrida_auth_token', 'hibrida30k-access-granted');
-      setIsAuthenticated(true);
-      return true;
-    }
-    return false;
+  const handleAuthSuccess = () => {
+    // Session will be updated automatically via onAuthStateChange
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('hibrida_auth_token');
-    setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await authService.signOut();
+    setSession(null);
     handleReset();
   };
 
@@ -162,8 +179,8 @@ const App: React.FC = () => {
   // Render Logic
   if (isAuthChecking) return null; // Or a minimal loading spinner
 
-  if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} />;
+  if (!session) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
   return (
@@ -181,29 +198,12 @@ const App: React.FC = () => {
           </button>
           
           <div className="flex items-center gap-3 md:gap-4">
-             <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-400">
-              <span className="flex items-center gap-1.5 hover:text-brand-start transition-colors">
-                <Lock size={14} /> Privacidade Garantida
-              </span>
-            </div>
-            
-            <button 
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-2 px-3 py-2 md:px-4 bg-surfaceHighlight hover:bg-border text-slate-300 rounded-lg transition-all border border-border group"
-              title="Configurações de Abreviação"
-            >
-              <Settings size={18} className="text-brand-start group-hover:rotate-90 transition-transform" />
-              <span className="hidden sm:inline text-sm font-medium">Customização</span>
-            </button>
-
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-all border border-red-500/20"
-              title="Sair"
-            >
-              <LogOut size={18} />
-              <span className="hidden sm:inline text-sm font-medium">Sair</span>
-            </button>
+            <UserMenu
+              userName={userProfile?.full_name || null}
+              userEmail={session?.user?.email || ''}
+              onLogout={handleLogout}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+            />
           </div>
         </div>
       </header>
