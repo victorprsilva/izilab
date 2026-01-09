@@ -1,0 +1,8 @@
+{
+  "name": "IZI LAB",
+  "description": "Seus exames organizados num toque. Plataforma de Inteligência Híbrida para médicos.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
