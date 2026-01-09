@@ -8,7 +8,8 @@ import FileUpload from './components/FileUpload';
 import BloodLoader from './components/BloodLoader';
 import AuthScreen from './components/auth/AuthScreen';
 import UserMenu from './components/UserMenu';
-import { Lock, FileText, CheckCircle2, Play, Trash2, File as FileIcon, Zap, MessageSquare } from 'lucide-react';
+import { Lock, FileText, CheckCircle2, Play, Trash2, File as FileIcon, Zap } from 'lucide-react';
+import FeedbackButton from './components/FeedbackButton';
 import type { Session } from '@supabase/supabase-js';
 
 // Lazy load heavy components for better performance
@@ -390,22 +391,20 @@ const App: React.FC = () => {
         />
       </Suspense>
 
+      {/* Floating Feedback Button */}
+      <FeedbackButton onClick={() => setIsFeedbackOpen(true)} />
+
       {/* Footer */}
       <footer className="py-8 bg-surface border-t border-border mt-auto relative z-20">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-6 text-center md:text-left">
           
-          <div className="flex flex-col gap-2 items-center md:items-start">
-            <div>
-              <p className="text-slate-300 font-semibold">App da HybridApps</p>
-              <p className="text-slate-500 text-sm">Powered by IZI LAB</p>
+          <div className="flex flex-col gap-1 items-center md:items-start">
+            <p className="text-slate-300 font-semibold">App da HybridApps</p>
+            <p className="text-slate-500 text-sm">Powered by IZI LAB</p>
+            <div className="flex items-center gap-1.5 mt-2 text-slate-500 text-xs">
+              <Lock size={12} />
+              <span>Privacidade Garantida</span>
             </div>
-            <button 
-              onClick={() => setIsFeedbackOpen(true)}
-              className="mt-1 flex items-center gap-2 text-xs font-semibold text-brand-start hover:text-brand-end transition-colors bg-brand-start/10 hover:bg-brand-start/20 px-3 py-1.5 rounded-full border border-brand-start/20"
-            >
-              <MessageSquare size={12} />
-              Enviar Feedback / Reportar Erro
-            </button>
           </div>
 
           <div className="flex flex-col gap-1 items-center md:items-end">
