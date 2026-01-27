@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { CustomAbbreviation } from './types';
 import { authService, UserProfile } from './services/authService';
 import AuthScreen from './components/auth/AuthScreen';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import PlansPage from './pages/PlansPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import type { Session } from '@supabase/supabase-js';
 
 const App: React.FC = () => {
+  const location = useLocation();
+  
   // Authentication State
   const [session, setSession] = useState<Session | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -65,6 +68,15 @@ const App: React.FC = () => {
   // Render Logic
   if (isAuthChecking) return null;
 
+  // Allow access to reset-password page without session
+  if (location.pathname === '/reset-password') {
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+      </Routes>
+    );
+  }
+
   if (!session) {
     return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
@@ -97,6 +109,7 @@ const App: React.FC = () => {
         path="/plans"
         element={<PlansPage session={session} />}
       />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
