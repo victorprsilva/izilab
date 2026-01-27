@@ -96,11 +96,11 @@ export const analyzeLabExam = async (
   customAbbreviations: CustomAbbreviation[] = [],
   preferences: AnalysisPreferences
 ): Promise<AnalyzedExam[]> => {
-  if (!import.meta.env.GEMINI_API_KEY) {
+  if (!import.meta.env.VITE_GEMINI_API_KEY) {
     throw new Error("Chave de API não configurada.");
   }
 
-  const ai = new GoogleGenAI({ apiKey: import.meta.env.GEMINI_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
   
   // Prepare contents based on input type
   let parts: any[] = [];
