@@ -144,40 +144,55 @@ export const analyzeLabExam = async (
     ? "- **LAB REFS**: Include reference ranges in 'referenceRange'."
     : "- **LAB REFS**: Leave 'referenceRange' empty.";
 
-  const dateGroupingRule = preferences.groupDates
-    ? `- **LAB HISTORY**: If multiple dates exist in a table, combine values with " -> ".`
-    : `- **LAB HISTORY**: Treat each date as a separate entry or pick the most recent.`;
-
   const systemInstruction = `
     You are an expert medical assistant designed to summarize medical documents for doctors.
     Your goal is to classify the document type (LAB vs NON_LAB) and extract relevant data strictly following the schema.
 
-    **STEP 1: CLASSIFICATION**
-    - **LAB**: Blood work, Urine tests, Biochemical profiles with numeric tables.
-    - **NON_LAB**: Imaging (MRI, CT, X-Ray, USG), Pathology reports, Biopsies, Discharge summaries, Medical letters.
+    *STRICT ANTI-DUPLICATION RULE*: 
+    - *NEVER* repeat the same abbreviation for the SAME DATE in the output.
+    - If a document contains multiple columns with different dates (historical evolution), extract ALL columns as separate objects, each with its specific 'date'.
 
-    **STEP 2: EXTRACTION RULES**
+    *STRICT NO-EVOLUTION RULE*:
+    - *NEVER* combine values with arrows (->).
+    - Always extract each result as a separate entry object with its specific date. 
+    - Example: If Hemoglobin is 12 on 01/01 and 13 on 02/01, create TWO distinct objects in the array. Do not merge them into a string.
 
-    *** IF "LAB" ***:
-    1. **ANONYMIZATION**: Patient Name -> Initials. Age -> Extract.
-    2. **DATA**: Extract values, replacing dots with commas. Remove units.
-    3. **ABNORMALITY**: Classify based on age (Pediatric vs Adult).
-    4. **ABBREVIATIONS**: Use standard medical abbreviations (Hb, Leuco, Cr, TSH, etc.).
-       - **CRITICAL**: "Proteína C Reativa" MUST be abbreviated as "PCR", NEVER "CRP".
+    *STEP 1: CLASSIFICATION*
+    - *LAB*: Blood work, Urine tests, Biochemical profiles.
+    - *NON_LAB*: Imaging (MRI, CT, X-Ray, USG), Pathology, Medical letters.
+
+    *STEP 2: EXTRACTION RULES (LAB)*
+
+    1. *ANONYMIZATION*: Patient Name -> Initials. Age -> Extract.
+    2. *DATA*: Extract values, replacing dots with commas (decimal separator). Remove units.
+    3. *ABNORMALITY*: Classify HIGH/LOW based on reference or medical knowledge.
+    
+    4. *STRICT HEMOGRAM RULES*:
+       - INCLUDE ONLY: Hb, Ht, VCM, CHCM, RDW, Leuco, Neutro, Bast, Segmentados, Eosi, Baso, Linfo, Mono, Plaq.
+       - *EXCLUDE*: VPM (MPV).
+
+    5. *RENAL & ELECTROLYTES*:
+       - *MANDATORY*: "Ureia" -> "Ur".
+       - *MANDATORY*: "Creatinina" -> "Cr".
+       - "Sodium" -> "Na", "Potassium" -> "K", "Phosphorus" -> "P", "Magnesium" -> "Mg", "Calcium" -> "Ca".
+
+    6. *URINE (URINA)*:
+       - *PROTEIN/CREATININE RATIO*: Extract ONLY as "P/CrU". Do not extract Urine Prot/Creat separately.
+       - *SUFFIX RULE*: Use " U" for urine-specific blood markers (e.g., "Leuco U", "H U", "Glic U").
+       - *EXCLUDE*: Eritr (count), Bili U, Urob U, Ascorbic Acid.
+
+    7. *IMMUNOSUPPRESSANTS*: Tacrolimus (Fk), Sirolimus (Srl), Ciclosporina (Csa), Everolimus (Evr).
+
+    8. *PCR*: "Proteína C Reativa" -> "PCR".
+
     ${referenceValueRule}
-    ${dateGroupingRule}
     ${customRulesText}
 
-    *** IF "NON_LAB" ***:
-    1. **ANONYMIZATION**: Patient Name -> Initials.
-    2. **EXAM TITLE**: Identify the specific exam (e.g., "TC de Tórax", "Biópsia Gástrica").
-    3. **MAIN FINDINGS**: Summarize the key findings in the body of the text. detailed but concise bullet points. Ignore boilerplate normal text if there are pathological findings.
-    4. **IMPRESSION/CONCLUSION**: Extract the final conclusion or diagnostic impression verbatim or summarized.
-    5. **LAB RESULTS**: Leave the 'labResults' array empty.
+    * IF "NON_LAB" *:
+    - Summarize findings in bullet points.
+    - Provide a clear 'impression' (conclusion).
 
-    **OUTPUT**:
-    - Return a JSON ARRAY of objects.
-    - Ensure 'category' is correctly set to "LAB" or "NON_LAB".
+    *OUTPUT*: Return a JSON ARRAY of objects. Each object represents one patient's record.
   `;
 
   try {

@@ -1,21 +1,31 @@
 import React, { useState } from 'react';
-import { X, Plus, Trash2, Check } from 'lucide-react';
+import { X, Plus, Trash2, Check, Loader2, Cloud } from 'lucide-react';
 import { CustomAbbreviation } from '../types';
+import { authService } from '../services/authService';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   abbreviations: CustomAbbreviation[];
   setAbbreviations: (abbr: CustomAbbreviation[]) => void;
+  userId?: string;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, abbreviations, setAbbreviations }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, abbreviations, setAbbreviations, userId }) => {
   const [examName, setExamName] = useState('');
   const [abbr, setAbbr] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleAdd = (e: React.FormEvent) => {
+  const saveToSupabase = async (updated: CustomAbbreviation[]) => {
+    if (!userId) return;
+    setIsSaving(true);
+    await authService.saveCustomizations(userId, updated);
+    setIsSaving(false);
+  };
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!examName.trim() || !abbr.trim()) return;
 
@@ -27,18 +37,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, abbrevia
 
     const updated = [...abbreviations, newAbbr];
     setAbbreviations(updated);
-    // Salva automaticamente no localStorage
-    localStorage.setItem('seo_custom_abbreviations', JSON.stringify(updated));
+    await saveToSupabase(updated);
     
     setExamName('');
     setAbbr('');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const updated = abbreviations.filter(item => item.id !== id);
     setAbbreviations(updated);
-    // Salva automaticamente no localStorage
-    localStorage.setItem('seo_custom_abbreviations', JSON.stringify(updated));
+    await saveToSupabase(updated);
   };
 
   return (
@@ -123,8 +131,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, abbrevia
         {/* Footer */}
         <div className="px-6 py-4 border-t border-border bg-surfaceHighlight flex justify-between items-center">
           <span className="text-xs text-slate-400 italic flex items-center gap-1">
-            <Check size={14} className="text-green-500" />
-            Salvo automaticamente
+            {isSaving ? (
+              <>
+                <Loader2 size={14} className="text-brand-start animate-spin" />
+                Salvando na nuvem...
+              </>
+            ) : (
+              <>
+                <Cloud size={14} className="text-green-500" />
+                Sincronizado com sua conta
+              </>
+            )}
           </span>
           <button 
             onClick={onClose}

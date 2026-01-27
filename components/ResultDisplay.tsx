@@ -1,7 +1,10 @@
 
 import React, { useState, useRef, memo } from 'react';
 import { AnalyzedExam, LabResultItem } from '../types';
-import { Copy, CheckCheck, RefreshCw, ScanEye, ArrowLeft, AlertTriangle, ChevronDown, ChevronUp, FilePlus, User, Trash2, XCircle, Download, MessageSquare, FileText, Stethoscope, AlignJustify, Grid } from 'lucide-react';
+import { Copy, CheckCheck, RefreshCw, ScanEye, ArrowLeft, AlertTriangle, ChevronDown, ChevronUp, FilePlus, User, Trash2, XCircle, Download, MessageSquare, FileText, Stethoscope, AlignJustify, Grid, FileSpreadsheet, FileDown, BarChart3 } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine } from 'recharts';
 
 interface ResultDisplayProps {
   data: AnalyzedExam[];
@@ -33,71 +36,148 @@ const getCategory = (abbr: string): string => {
   return 'OUTROS';
 };
 
-// Excel Export Helper
+// Excel Export Helper using XLSX library
 const downloadExcel = (exam: AnalyzedExam) => {
-    let htmlContent = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #000; padding: 5px; text-align: left; }
-                .abnormal { color: red; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <h3>${exam.patientInitials} - ${exam.category === 'NON_LAB' ? exam.nonLabData?.examTitle : 'Exame Laboratorial'} - ${exam.collectionDate || 'Data N/A'}</h3>
-    `;
+    const wb = XLSX.utils.book_new();
+    const today = new Date();
+    const dateStr = exam.collectionDate || `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
     if (exam.category === 'LAB') {
-        htmlContent += `
-            <table>
-                <thead>
-                    <tr>
-                        <th>Exame</th>
-                        <th>Resultado</th>
-                        <th>Referência</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-        exam.results.forEach(res => {
-            const isAbnormal = res.abnormality !== 'NORMAL';
-            const classStr = isAbnormal ? 'class="abnormal"' : '';
-            htmlContent += `
-                <tr>
-                    <td>${res.abbreviation}</td>
-                    <td ${classStr}>${res.value}</td>
-                    <td>${res.referenceRange || '-'}</td>
-                    <td ${classStr}>${res.abnormality}</td>
-                </tr>
-            `;
-        });
-        htmlContent += `</tbody></table>`;
+        const data = [
+            ['Exame', 'Resultado', 'Referência', 'Status'],
+            ...exam.results.map(res => [
+                res.abbreviation,
+                res.value,
+                res.referenceRange || '-',
+                res.abnormality
+            ])
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [{ wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
     } else {
-        // Excel format for Non-Lab
-        htmlContent += `
-            <h4>Título: ${exam.nonLabData?.examTitle || 'Laudo'}</h4>
-            <h5>Achados Principais:</h5>
-            <ul>
-                ${exam.nonLabData?.mainFindings.map(f => `<li>${f}</li>`).join('')}
-            </ul>
-            <h5>Conclusão:</h5>
-            <p>${exam.nonLabData?.impression || ''}</p>
-        `;
+        const data = [
+            ['Título', exam.nonLabData?.examTitle || 'Laudo'],
+            [''],
+            ['Achados Principais'],
+            ...(exam.nonLabData?.mainFindings.map(f => ['• ' + f]) || []),
+            [''],
+            ['Conclusão'],
+            [exam.nonLabData?.impression || '']
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [{ wch: 80 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Laudo');
     }
 
-    htmlContent += `</body></html>`;
+    const fileName = `IZI_LAB_${exam.patientInitials}_${dateStr.replace(/\//g, '-')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+};
 
-    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${exam.patientInitials}_${exam.category}_${exam.collectionDate?.replace(/\//g, '-') || 'Data'}.xls`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+// PDF Export Helper - Clean Light Design
+const downloadPDF = (exam: AnalyzedExam, summaryText: string) => {
+    const doc = new jsPDF();
+    const today = new Date();
+    const dateStr = exam.collectionDate || `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    const currentDate = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+    
+    // Colors - Clean Light Theme
+    const brandPrimary: [number, number, number] = [99, 102, 241]; // Indigo
+    const brandSecondary: [number, number, number] = [139, 92, 246]; // Purple
+    const textDark: [number, number, number] = [30, 41, 59]; // Slate 800
+    const textMuted: [number, number, number] = [100, 116, 139]; // Slate 500
+    const bgLight: [number, number, number] = [248, 250, 252]; // Slate 50
+    const borderColor: [number, number, number] = [226, 232, 240]; // Slate 200
+
+    // White Background
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, 210, 297, 'F');
+
+    // Header gradient bar
+    doc.setFillColor(...brandPrimary);
+    doc.rect(0, 0, 210, 4, 'F');
+
+    // Logo - IZILAB (texto único para evitar espaçamento)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.setTextColor(...brandPrimary);
+    doc.text('IZILAB', 20, 22);
+
+    // Tagline
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...textMuted);
+    doc.text('INTELIGÊNCIA HÍBRIDA', 20, 28);
+
+    // Date on right
+    doc.setFontSize(9);
+    doc.setTextColor(...textMuted);
+    doc.text(`Gerado em: ${currentDate}`, 190, 22, { align: 'right' });
+
+    // Divider line
+    doc.setDrawColor(...borderColor);
+    doc.setLineWidth(0.5);
+    doc.line(20, 35, 190, 35);
+
+    // Patient Info Section
+    doc.setFillColor(...bgLight);
+    doc.roundedRect(20, 42, 170, 28, 3, 3, 'F');
+    doc.setDrawColor(...borderColor);
+    doc.roundedRect(20, 42, 170, 28, 3, 3, 'S');
+
+    // Patient info text (without circle)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...textDark);
+    doc.text(exam.patientInitials, 28, 52);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...textMuted);
+    const examType = exam.category === 'LAB' ? 'Exame Laboratorial' : (exam.nonLabData?.examTitle || 'Laudo Médico');
+    doc.text(`${examType}  •  ${dateStr}`, 28, 62);
+    
+    if (exam.patientAge) {
+        doc.text(exam.patientAge, 170, 56, { align: 'right' });
+    }
+
+    // Results Section Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...brandPrimary);
+    doc.text('RESULTADOS', 20, 85);
+
+    // Results content box
+    doc.setFillColor(...bgLight);
+    doc.roundedRect(20, 90, 170, 160, 3, 3, 'F');
+    doc.setDrawColor(...borderColor);
+    doc.roundedRect(20, 90, 170, 160, 3, 3, 'S');
+
+    // Results Text
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.setTextColor(...textDark);
+    
+    const cleanSummary = summaryText
+        .replace(`${exam.patientInitials} - Lab (${dateStr}):\n`, '')
+        .replace(`${exam.patientInitials} - ${exam.nonLabData?.examTitle || 'Laudo'} (${dateStr}):\n\nACHADOS:\n`, '')
+        .replace('\n\nCONCLUSÃO:\n', '\n\nCONCLUSÃO:\n');
+    
+    const lines = doc.splitTextToSize(cleanSummary, 160);
+    doc.text(lines, 25, 100);
+
+    // Footer
+    doc.setDrawColor(...borderColor);
+    doc.line(20, 265, 190, 265);
+    
+    doc.setFontSize(8);
+    doc.setTextColor(...textMuted);
+    doc.text('IZI LAB - Inteligência Híbrida', 105, 273, { align: 'center' });
+    doc.text('Este documento é um resumo gerado automaticamente e não substitui o laudo original.', 105, 279, { align: 'center' });
+
+    // Save
+    const fileName = `IZI_LAB_${exam.patientInitials}_${dateStr.replace(/\//g, '-')}.pdf`;
+    doc.save(fileName);
 };
 
 // Feedback Helper
@@ -108,11 +188,68 @@ const sendFeedback = () => {
     window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
 };
 
+// Chart Data Helper - Parse numeric values from results
+const parseNumericValue = (value: string): number | null => {
+    const cleaned = value.replace(/[<>]/g, '').replace(',', '.').trim();
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? null : num;
+};
+
+// Parse reference range to get min/max
+const parseReferenceRange = (ref: string | undefined): { min: number | null; max: number | null } => {
+    if (!ref) return { min: null, max: null };
+    
+    // Handle ranges like "3.5 - 5.5" or "3,5 - 5,5"
+    const rangeMatch = ref.match(/(\d+[.,]?\d*)\s*[-–a]\s*(\d+[.,]?\d*)/);
+    if (rangeMatch) {
+        return {
+            min: parseFloat(rangeMatch[1].replace(',', '.')),
+            max: parseFloat(rangeMatch[2].replace(',', '.'))
+        };
+    }
+    
+    // Handle "< 5" or "> 3"
+    const lessThanMatch = ref.match(/<\s*(\d+[.,]?\d*)/);
+    if (lessThanMatch) {
+        return { min: null, max: parseFloat(lessThanMatch[1].replace(',', '.')) };
+    }
+    
+    const greaterThanMatch = ref.match(/>\s*(\d+[.,]?\d*)/);
+    if (greaterThanMatch) {
+        return { min: parseFloat(greaterThanMatch[1].replace(',', '.')), max: null };
+    }
+    
+    return { min: null, max: null };
+};
+
+// Custom Tooltip for Chart
+const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+        const data = payload[0].payload;
+        return (
+            <div className="bg-surface border border-border rounded-lg p-3 shadow-xl">
+                <p className="text-white font-bold text-sm">{data.name}</p>
+                <p className="text-slate-300 text-xs">Valor: <span className="font-mono">{data.displayValue}</span></p>
+                {data.reference && (
+                    <p className="text-slate-400 text-xs">Ref: {data.reference}</p>
+                )}
+                {data.status !== 'NORMAL' && (
+                    <p className={`text-xs font-semibold mt-1 ${data.status === 'HIGH' ? 'text-red-400' : 'text-blue-400'}`}>
+                        {data.status === 'HIGH' ? '↑ Elevado' : '↓ Baixo'}
+                    </p>
+                )}
+            </div>
+        );
+    }
+    return null;
+};
+
 // Memoized Patient Card for optimized rendering
 const PatientCard: React.FC<{ exam: AnalyzedExam; onRemove: (id: string) => void; isLeanMode: boolean }> = memo(({ exam, onRemove, isLeanMode }) => {
     const [copiedSummary, setCopiedSummary] = useState(false);
     const [copiedAbnormal, setCopiedAbnormal] = useState(false);
     const [showAbnormal, setShowAbnormal] = useState(false);
+    const [showChart, setShowChart] = useState(false);
 
     // Error State
     const isError = (!exam.results || exam.results.length === 0) && (!exam.nonLabData);
@@ -299,7 +436,14 @@ const PatientCard: React.FC<{ exam: AnalyzedExam; onRemove: (id: string) => void
                         className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-green-600/10 text-green-500 hover:bg-green-600/20 border border-green-600/20 rounded-lg text-xs font-bold uppercase transition-colors"
                         title="Baixar Excel"
                     >
-                        <Download size={14} /> Excel
+                        <FileSpreadsheet size={14} /> Excel
+                    </button>
+                    <button
+                        onClick={() => downloadPDF(exam, fullClipboardText)}
+                        className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-red-600/10 text-red-400 hover:bg-red-600/20 border border-red-600/20 rounded-lg text-xs font-bold uppercase transition-colors"
+                        title="Baixar PDF"
+                    >
+                        <FileDown size={14} /> PDF
                     </button>
                     <button onClick={() => onRemove(exam.id)} className="text-slate-500 hover:text-red-400 transition-colors p-2 hover:bg-white/5 rounded-lg">
                         <Trash2 size={18} />
@@ -412,6 +556,119 @@ const PatientCard: React.FC<{ exam: AnalyzedExam; onRemove: (id: string) => void
                     </div>
                 )
             )}
+
+            {/* Chart Visualization Section (FOR LAB EXAMS) */}
+            {exam.category === 'LAB' && exam.results.length > 0 && (
+                <div className="border-t border-brand-start/20">
+                    <button 
+                        onClick={() => setShowChart(!showChart)} 
+                        className="w-full flex items-center justify-between px-6 py-4 bg-brand-start/5 hover:bg-brand-start/10 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="p-1.5 bg-brand-start/20 text-brand-start rounded-full border border-brand-start/20">
+                                <BarChart3 size={16} />
+                            </div>
+                            <div className="text-left">
+                                <h4 className="font-bold text-slate-300 text-sm">Visualização em Gráfico</h4>
+                            </div>
+                        </div>
+                        {showChart ? <ChevronUp className="text-slate-500" /> : <ChevronDown className="text-slate-500" />}
+                    </button>
+                    
+                    {showChart && (
+                        <div className="p-6 border-t border-brand-start/20 animate-fade-in bg-brand-start/5">
+                            <div className="mb-4">
+                                <label className="block text-xs font-semibold text-brand-start uppercase tracking-wider mb-4">
+                                    Resultados por Exame
+                                </label>
+                                <div className="bg-background rounded-xl p-4 border border-border">
+                                    <ResponsiveContainer width="100%" height={Math.max(300, exam.results.filter(r => parseNumericValue(r.value) !== null).length * 35)}>
+                                        <BarChart
+                                            data={exam.results
+                                                .filter(r => parseNumericValue(r.value) !== null)
+                                                .map(r => {
+                                                    const numValue = parseNumericValue(r.value) || 0;
+                                                    const ref = parseReferenceRange(r.referenceRange);
+                                                    let normalizedValue = numValue;
+                                                    
+                                                    // Normalize to percentage if we have reference range
+                                                    if (ref.min !== null && ref.max !== null) {
+                                                        const mid = (ref.min + ref.max) / 2;
+                                                        const range = ref.max - ref.min;
+                                                        normalizedValue = ((numValue - mid) / (range / 2)) * 50 + 50;
+                                                    }
+                                                    
+                                                    return {
+                                                        name: r.abbreviation,
+                                                        value: Math.min(Math.max(normalizedValue, 0), 100),
+                                                        rawValue: numValue,
+                                                        displayValue: r.value,
+                                                        reference: r.referenceRange,
+                                                        status: r.abnormality,
+                                                        refMin: ref.min,
+                                                        refMax: ref.max
+                                                    };
+                                                })
+                                            }
+                                            layout="vertical"
+                                            margin={{ top: 5, right: 30, left: 60, bottom: 5 }}
+                                        >
+                                            <XAxis 
+                                                type="number" 
+                                                domain={[0, 100]} 
+                                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                                axisLine={{ stroke: '#334155' }}
+                                                tickLine={{ stroke: '#334155' }}
+                                            />
+                                            <YAxis 
+                                                type="category" 
+                                                dataKey="name" 
+                                                tick={{ fill: '#e2e8f0', fontSize: 11, fontWeight: 500 }}
+                                                axisLine={{ stroke: '#334155' }}
+                                                tickLine={false}
+                                                width={55}
+                                            />
+                                            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.1)' }} />
+                                            <ReferenceLine x={50} stroke="#475569" strokeDasharray="3 3" />
+                                            <Bar dataKey="value" radius={[0, 4, 4, 0]} maxBarSize={20}>
+                                                {exam.results
+                                                    .filter(r => parseNumericValue(r.value) !== null)
+                                                    .map((r, index) => (
+                                                        <Cell 
+                                                            key={`cell-${index}`} 
+                                                            fill={
+                                                                r.abnormality === 'HIGH' ? '#ef4444' : 
+                                                                r.abnormality === 'LOW' ? '#3b82f6' : 
+                                                                '#6366f1'
+                                                            }
+                                                        />
+                                                    ))
+                                                }
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                    
+                                    {/* Legend */}
+                                    <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t border-border">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded bg-[#6366f1]"></div>
+                                            <span className="text-xs text-slate-400">Normal</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded bg-[#ef4444]"></div>
+                                            <span className="text-xs text-slate-400">Elevado</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-3 h-3 rounded bg-[#3b82f6]"></div>
+                                            <span className="text-xs text-slate-400">Baixo</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 });
@@ -439,7 +696,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ data, onReset, onAddFiles
     <div className="w-full max-w-4xl mx-auto animate-fade-in-up pb-24">
       <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept="application/pdf,image/*" multiple />
 
-      <div className="flex items-center justify-between mb-6 sticky top-20 z-40 bg-background/90 backdrop-blur-md py-4 border-b border-border/50">
+      <div className="flex items-center justify-between mb-6 sticky top-20 z-10 bg-surface/95 backdrop-blur-md py-4 px-6 border border-border rounded-2xl shadow-lg">
         <button onClick={onReset} className="flex items-center gap-2 text-slate-400 hover:text-brand-start transition-colors text-sm font-medium group">
             <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Voltar
         </button>
