@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Camera, Loader2, CheckCircle2, AlertCircle, Crown, Zap, ExternalLink, CreditCard } from 'lucide-react';
+import { ArrowLeft, User, Mail, Camera, Loader2, CheckCircle2, AlertCircle, Crown, Zap, ExternalLink, CreditCard, Infinity } from 'lucide-react';
 import { authService, UserProfile } from '../services/authService';
+import { stripeService, PlanType } from '../services/stripeService';
 import Logo from '../components/Logo';
 
 interface ProfilePageProps {
   session: { user: { id: string; email: string } } | null;
   userProfile: UserProfile | null;
   onProfileUpdate: (profile: UserProfile) => void;
-  currentPlan?: 'free' | 'pro' | 'enterprise';
   creditsUsed?: number;
   creditsTotal?: number;
 }
@@ -17,7 +17,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   session, 
   userProfile, 
   onProfileUpdate,
-  currentPlan = 'free',
   creditsUsed = 3,
   creditsTotal = 5
 }) => {
@@ -26,6 +25,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('free');
+  const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+  const [isManagingSubscription, setIsManagingSubscription] = useState(false);
 
   const planInfo = {
     free: { name: 'Gratuito', color: 'slate', icon: Zap },
@@ -36,10 +38,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
   const plan = planInfo[currentPlan];
   const creditsPercentage = (creditsUsed / creditsTotal) * 100;
 
-  const handleManageSubscription = () => {
-    // TODO: Integrar com Stripe Customer Portal
-    console.log('Redirect to Stripe Customer Portal');
-    // window.location.href = 'STRIPE_CUSTOMER_PORTAL_URL';
+  const handleManageSubscription = async () => {
+    setIsManagingSubscription(true);
+    try {
+      await stripeService.redirectToPortal();
+    } catch (error) {
+      console.error('Error opening portal:', error);
+      alert('Erro ao abrir portal. Tente novamente.');
+    } finally {
+      setIsManagingSubscription(false);
+    }
   };
 
   useEffect(() => {
@@ -47,6 +55,21 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
       setFullName(userProfile.full_name);
     }
   }, [userProfile]);
+
+  useEffect(() => {
+    const fetchPlan = async () => {
+      if (session?.user?.id) {
+        try {
+          const plan = await stripeService.getCurrentPlan(session.user.id);
+          setCurrentPlan(plan);
+        } catch (error) {
+          console.error('Error fetching plan:', error);
+        }
+      }
+      setIsLoadingPlan(false);
+    };
+    fetchPlan();
+  }, [session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,9 +253,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
                     currentPlan === 'free' 
                       ? 'bg-slate-500/20 text-slate-400' 
-                      : currentPlan === 'pro'
-                      ? 'bg-amber-500/20 text-amber-400'
-                      : 'bg-violet-500/20 text-violet-400'
+                      : 'bg-gradient-to-br from-brand-start to-brand-end text-white'
                   }`}>
                     <plan.icon size={24} />
                   </div>
@@ -242,38 +263,46 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   </div>
                 </div>
                 {currentPlan !== 'free' && (
-                  <span className="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-semibold rounded-full">
+                  <span className="px-3 py-1 bg-brand-start/20 text-brand-start text-xs font-semibold rounded-full border border-brand-start/30">
                     Ativo
                   </span>
                 )}
               </div>
 
-              {/* Credits Usage */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-slate-400">Créditos Utilizados</p>
-                  <p className="text-sm font-semibold text-white">
-                    {creditsUsed} <span className="text-slate-500">/ {creditsTotal}</span>
-                  </p>
+              {/* Credits Usage - Only show for free plan */}
+              {currentPlan === 'free' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-slate-400">Créditos Utilizados</p>
+                    <p className="text-sm font-semibold text-white">
+                      {creditsUsed} <span className="text-slate-500">/ {creditsTotal}</span>
+                    </p>
+                  </div>
+                  <div className="w-full h-2 bg-background rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        creditsPercentage >= 90 
+                          ? 'bg-red-500' 
+                          : creditsPercentage >= 70 
+                          ? 'bg-amber-500' 
+                          : 'bg-gradient-to-r from-brand-start to-brand-end'
+                      }`}
+                      style={{ width: `${creditsPercentage}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">Renova no início de cada mês</p>
                 </div>
-                <div className="w-full h-2 bg-background rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      creditsPercentage >= 90 
-                        ? 'bg-red-500' 
-                        : creditsPercentage >= 70 
-                        ? 'bg-amber-500' 
-                        : 'bg-gradient-to-r from-brand-start to-brand-end'
-                    }`}
-                    style={{ width: `${creditsPercentage}%` }}
-                  />
+              ) : (
+                <div className="flex items-center gap-3 p-4 bg-brand-start/10 border border-brand-start/20 rounded-xl">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand-start to-brand-end flex items-center justify-center">
+                    <Infinity size={20} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-brand-start">Análises Ilimitadas</p>
+                    <p className="text-xs text-slate-400">Seu plano não possui limite de créditos</p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500">
-                  {currentPlan === 'free' 
-                    ? 'Renova no início de cada mês' 
-                    : 'Créditos ilimitados no seu plano'}
-                </p>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -289,9 +318,14 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                   <>
                     <button
                       onClick={handleManageSubscription}
-                      className="flex-1 bg-surfaceHighlight hover:bg-border text-white font-semibold py-3 rounded-xl border border-border transition-all flex items-center justify-center gap-2"
+                      disabled={isManagingSubscription}
+                      className="flex-1 bg-surfaceHighlight hover:bg-border text-white font-semibold py-3 rounded-xl border border-border transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                      <ExternalLink size={16} />
+                      {isManagingSubscription ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <ExternalLink size={16} />
+                      )}
                       Gerenciar Assinatura
                     </button>
                     <button

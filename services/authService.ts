@@ -117,16 +117,16 @@ export const authService = {
       .from('user_customizations')
       .select('abbreviations')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code === 'PGRST116') {
-      // No row found, return empty array
+    if (error) {
+      console.error('Error fetching customizations:', error);
       return { abbreviations: [], error: null };
     }
 
     return {
       abbreviations: data?.abbreviations || [],
-      error: error ? { message: error.message } : null,
+      error: null,
     };
   },
 

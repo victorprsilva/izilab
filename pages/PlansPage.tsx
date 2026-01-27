@@ -1,14 +1,70 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Crown, Zap, Star, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, Crown, Zap, Star, Sparkles, Loader2, Settings } from 'lucide-react';
+import { stripeService, STRIPE_PRICES, PlanType } from '../services/stripeService';
+import type { Session } from '@supabase/supabase-js';
 import Logo from '../components/Logo';
 
 interface PlansPageProps {
-  currentPlan?: 'free' | 'pro' | 'enterprise';
+  session: Session | null;
 }
 
-const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
+const PlansPage: React.FC<PlansPageProps> = ({ session }) => {
   const navigate = useNavigate();
+  const [currentPlan, setCurrentPlan] = useState<PlanType>('free');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
+
+  useEffect(() => {
+    const fetchCurrentPlan = async () => {
+      if (session?.user?.id) {
+        try {
+          const plan = await stripeService.getCurrentPlan(session.user.id);
+          setCurrentPlan(plan);
+          const subscription = await stripeService.getActiveSubscription(session.user.id);
+          setHasSubscription(!!subscription);
+        } catch (error) {
+          console.error('Error fetching plan:', error);
+        }
+      }
+      setIsLoading(false);
+    };
+    fetchCurrentPlan();
+  }, [session]);
+
+  const handleSelectPlan = async (planId: string) => {
+    if (!session) {
+      navigate('/login');
+      return;
+    }
+
+    if (planId === 'free' || planId === currentPlan) return;
+
+    setIsProcessing(planId);
+    try {
+      if (planId === 'pro') {
+        await stripeService.redirectToCheckout(STRIPE_PRICES.PRO);
+      }
+    } catch (error) {
+      console.error('Error creating checkout:', error);
+      alert('Erro ao processar. Tente novamente.');
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const handleManageSubscription = async () => {
+    setIsProcessing('manage');
+    try {
+      await stripeService.redirectToPortal();
+    } catch (error) {
+      console.error('Error opening portal:', error);
+      alert('Erro ao abrir portal. Tente novamente.');
+    } finally {
+      setIsProcessing(null);
+    }
+  };
 
   const plans = [
     {
@@ -27,6 +83,7 @@ const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
       buttonText: currentPlan === 'free' ? 'Plano Atual' : 'Selecionar',
       isPopular: false,
       isCurrent: currentPlan === 'free',
+      isAvailable: true,
     },
     {
       id: 'pro',
@@ -46,6 +103,7 @@ const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
       buttonText: currentPlan === 'pro' ? 'Plano Atual' : 'Assinar Agora',
       isPopular: true,
       isCurrent: currentPlan === 'pro',
+      isAvailable: true,
     },
     {
       id: 'enterprise',
@@ -62,11 +120,20 @@ const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
         'Relatórios avançados',
         'Suporte dedicado 24/7',
       ],
-      buttonText: currentPlan === 'enterprise' ? 'Plano Atual' : 'Falar com Vendas',
+      buttonText: 'Em Breve',
       isPopular: false,
-      isCurrent: currentPlan === 'enterprise',
+      isCurrent: false,
+      isAvailable: false,
     },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-start" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col font-sans bg-background text-slate-100">
@@ -109,6 +176,20 @@ const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
             <p className="text-slate-400 mt-3 max-w-xl mx-auto">
               Escolha o plano ideal para suas necessidades. Todos os planos incluem acesso à nossa tecnologia de IA.
             </p>
+            {hasSubscription && (
+              <button
+                onClick={handleManageSubscription}
+                disabled={isProcessing === 'manage'}
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surfaceHighlight hover:bg-border text-white text-sm font-medium transition-colors border border-border"
+              >
+                {isProcessing === 'manage' ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Settings size={16} />
+                )}
+                Gerenciar Assinatura
+              </button>
+            )}
           </div>
 
           {/* Plans Grid */}
@@ -174,15 +255,19 @@ const PlansPage: React.FC<PlansPageProps> = ({ currentPlan = 'free' }) => {
 
                     {/* CTA Button */}
                     <button
-                      disabled={plan.isCurrent}
-                      className={`w-full py-3.5 rounded-xl font-bold transition-all ${
+                      onClick={() => handleSelectPlan(plan.id)}
+                      disabled={plan.isCurrent || !plan.isAvailable || isProcessing === plan.id}
+                      className={`w-full py-3.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
                         plan.isCurrent
                           ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
+                          : !plan.isAvailable
+                          ? 'bg-slate-700/50 text-slate-500 border border-slate-600/30 cursor-not-allowed'
                           : plan.isPopular
                           ? 'bg-gradient-to-r from-brand-start to-brand-end hover:from-brand-600 hover:to-brand-700 text-white shadow-lg shadow-brand-start/20 hover:shadow-brand-start/40 active:scale-[0.98]'
                           : 'bg-surfaceHighlight hover:bg-border text-white border border-border'
                       }`}
                     >
+                      {isProcessing === plan.id && <Loader2 size={18} className="animate-spin" />}
                       {plan.buttonText}
                     </button>
                   </div>

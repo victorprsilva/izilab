@@ -95,7 +95,7 @@ const App: React.FC = () => {
       />
       <Route
         path="/plans"
-        element={<PlansPage currentPlan="free" />}
+        element={<PlansPage session={session} />}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
